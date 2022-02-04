@@ -1,0 +1,181 @@
+---
+title: "W1 - Interactive map in Leaflet"
+author: "Sofie Lloyd Thomsen"
+date: 'created on 01 February 2022 and updated `r format(Sys.time(), "%d %B %Y")`'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Exercise 1
+*Describe a problem or question in your field that lends itself to spatial analysis.*
+
+**Answer**  
+In the study of religion spatial analysis can be used to map e.g. graveyards. From a sociological perspective it might be interesting to look at whether people have been cremated or buried, and also how far from each other the church where they were baptized and the church where they were cremated or buried are. Also graveyards are interesting over a long period of time - e.g. how, where and why did people bury people the way they did in the Viking Age compared to now? 
+
+## Exercise 2
+*List data layers that you think are necessary to answer your question/solve your problem. Describe examples of two or three of your listed layers and see if you can find them on the internet.*
+
+**Answer**  
+To investigate graveyards you would need **feature layers** in order to class geographic features as graveyards. If I want to investigate the more historical point of view of graveyards, **scene layers** could be a useful tool to visualise the changes from then to now and it is useful if I want to make a Development Impact Analysis. 
+
+Reference: https://pro.arcgis.com/en/pro-app/latest/help/mapping/layer-properties/layers.htm
+
+
+## Exercise 8: Option 2
+*Make a Map: You wish to travel to Chicago for a study stay but wish to stay away from the most crime-ridden areas. You have a friend at Evanston, who invited you in. Is it safe to stay at her place? Make a map that allows both of you to explore the local situation. Use the ChicagoCrime.csv (attached here or on Github) to create an interactive map of murders in the city. Is a heatmap or clustered points better?*
+
+**Answer**  
+I think that clustered points would be better to visualise there the highest frequency of crime in Chicago is. However a heatmap would maybe give a more detailed picture. 
+
+### Exercise 9 & Exercise 10
+*Create a standalone .html map in Leaflet showing at least basic topography and relief, and load in the table of points. Make sure she can see the locations of crime and crime attributes when you hovers over the point markers.  Consider adding elements such as minimap() and measure() for easier map interaction*
+
+**Answer**  
+```{r}
+# Libraries
+library(leaflet)
+library(htmlwidgets)
+library(tidyverse)
+```
+
+```{r}
+# Evanston with setView
+leaflet() %>%
+  addTiles() %>%
+  addProviderTiles("Esri.WorldImagery", 
+                   options = providerTileOptions(opacity=0.5)) %>% 
+  setView(lng = -87.688568, lat = 42.045597, zoom = 13)
+
+# Providing esri background
+l_ev <- leaflet() %>%   # assign the base location to an object
+  setView(-87.688568, 42.045597, zoom = 13)
+
+esri <- grep("^Esri", providers, value = TRUE)
+
+for (provider in esri) {
+  l_ev <- l_ev %>% addProviderTiles(provider, group = provider)
+}
+
+EVmap <- l_ev %>%
+  addLayersControl(baseGroups = names(esri),
+                   options = layersControlOptions(collapsed = FALSE)) %>%
+  addMiniMap(tiles = esri[[1]], toggleDisplay = TRUE,
+             position = "bottomright") %>%
+  addMeasure(
+    position = "bottomleft",
+    primaryLengthUnit = "meters",
+    primaryAreaUnit = "sqmeters",
+    activeColor = "#3D535D",
+    completedColor = "#7D4479") %>% 
+  htmlwidgets::onRender("
+                        function(el, x) {
+                        var myMap = this;
+                        myMap.on('baselayerchange',
+                        function (e) {
+                        myMap.minimap.changeLayer(L.tileLayer.provider(e.name));
+                        })
+                        }") %>% 
+addControl("", position = "topright")
+
+# Save map as a html document 
+saveWidget(EVmap, "EVmap.html", selfcontained = TRUE)
+```
+
+
+```{r}
+# Locations of Crimes
+crimes <- read_csv("ChicagoCrimes2017.csv")
+```
+
+
+```{r}
+# Add markers
+leaflet() %>% 
+  addTiles() %>% 
+  addMarkers(lng = crimes$Longitude, 
+             lat = crimes$Latitude,
+             popup = crimes$Description,
+             label = crimes$`Primary Type`,
+             clusterOptions = markerClusterOptions()
+)
+
+# Due to the size of the dataset, I had to add clusterOptions, other wise the comand can run
+```
+
+
+### Exervise 11 
+*Can you create a heatmap of crime?*
+
+**Answer**
+Yaaas, watch me!
+```{r}
+# Load library
+library(leaflet.extras)
+
+# Cleaning of data
+cleaned_crimes <- crimes %>% 
+  filter(!is.na(Latitude)) %>%
+  select(c("Latitude","Longitude", "Primary Type", "Community Area"))
+
+
+# Add heatmap
+EVmap %>% 
+    addHeatmap(lng = cleaned_crimes$Longitude, lat = cleaned_crimes$Latitude, blur = 40, max = 0.05, radius = 15)
+```
+
+
+### Exercise 12
+Explore differentiating the markers (e.g. by color for different kinds of crime)
+
+**Answer**
+```{r}
+# Show primary crime types
+unique(cleaned_crimes$`Primary Type`)
+
+# Selecting the most dangerous crimes (in my opinon)
+danger <- c("ROBBERY", "ASSAULT", "HOMICIDE", "CRIM SEXUAL ASSAULT")
+
+# Function to get the color of a specific crime. 
+getColor <- function(danger) {
+  case_when(
+    danger == "HOMICIDE" ~ "darkgray",
+    danger == "ASSAULT" ~ "red",
+    danger == "CRIM SEXUAL ASSAULT" ~ "pink",
+    danger == "ROBBERY" ~ "orange",
+  )
+}
+
+# Creates a list of icons for plotting
+icons <- awesomeIcons(
+  icon = 'ios-close',
+  iconColor = 'black',
+  library = 'ion',
+  markerColor = getColor(crimes$`Primary Type`)
+)
+
+EVmap_color <- leaflet() %>% 
+  addTiles() %>% 
+  addAwesomeMarkers(lng = crimes$Longitude, 
+             lat = crimes$Latitude,
+             popup = paste('Crime:', crimes$`Primary Type`, '<br>',
+                           'Location:', crimes$`Location Description`),
+             icon = icons,
+             clusterOptions = markerClusterOptions())
+
+EVmap_color
+```
+
+
+
+
+### Exercise 13
+Explore the option of clustering markers with addMarkers(clusterOptions = markerClusterOptions()). Do you recommend marker clustering here?
+
+**Answer**
+Since I have already done this in exercise 9, I won't repeat myself. 
+But yes, I would recommend marker clustering in this case, because it encourage
+to exploration in the different areas of Chicago and it is easier to see the 
+individual crimes than on a heatmap, where the crimes just becomes one.
